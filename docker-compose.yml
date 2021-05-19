@@ -1,32 +1,38 @@
 version: "3.7"
 services:
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: pgadmin
-    env_file:
-      - ./env/pgadmin.env
+  # postgres:
+  #   image: postgres:alpine
+  #   container_name: postgres
+  #   restart: always
+  #   env_file:
+  #     - ./env/db.env
+  #   ports:
+  #     - 5432:5432
+  #   volumes:
+  #     - ./apps/db/pgdata:/var/lib/postgresql/data
+  #     # - ./db/schema_init.sql:/docker-entrypoint-initdb.d/1_init.sql
+  #     # - ./db/data_init.sql:/docker-entrypoint-initdb.d/2_data_init.sql
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: pgadmin
+  #   env_file:
+  #     - ./env/pgadmin.env
+  #   ports:
+  #     - "8080:80"
+  #   depends_on:
+  #     - postgres
+  redis:
+    container_name: redis
+    image: redis:latest
+  api:
+    container_name: api
+    build: ./apps/api
     ports:
-      - "8080:80"
-    depends_on:
-      - postgres
-    logging:
-    driver: "none"
-  postgres:
-    image: postgres:alpine
-    container_name: postgres
-    restart: always
-    env_file:
-      - ./env/database.env
-    ports:
-      - 5432:5432
+      - "127.0.0.1:5000:5000"
     volumes:
-      - ./db/pgdata:/var/lib/postgresql/data
-      # - ./db/schema_init.sql:/docker-entrypoint-initdb.d/1_init.sql
-      # - ./db/data_init.sql:/docker-entrypoint-initdb.d/2_data_init.sql
-    api:
-      container_name: api
-      build: ./api
-      ports:
-        - "127.0.0.1:5000:5000"
-      volumes:
-        - ./api:/code
+      - ./apps/api/:/code
+      - ./env:/code/env
+    environment:
+      FLASK_ENV: development
+    # depends_on:
+    #   - postgres
