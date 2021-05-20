@@ -7,11 +7,12 @@ import pandas as pd
 import sys
 
 
-class fetch_records():
+class FetchData():
 
-    def __init__(self, client):
+    def __init__(self):
         super().__init__()
-        self.client = client
+        api = dotenv_values("./env/api.env")
+        self.client = Client(api["API"], api["SECRET"])
         db = dotenv_values("./env/db.env")
         self.db_env = {
             "host": db["POSTGRES_HOST"],
@@ -23,22 +24,22 @@ class fetch_records():
     def connect(self):
         conn = None
         try:
-            conn = psycopg2.connect(self.db_env)
+            conn = psycopg2.connect(**self.db_env)
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
             sys.exit(1)
         return conn
 
-    def get_and_interpolate(self):
+    def get_and_interpolate(self, unit):
         klines = self.client.get_historical_klines(
-            "BTCUSDT", Client.KLINE_INTERVAL_1HOUR, "1 Jan, 2018")
+            unit, Client.KLINE_INTERVAL_1HOUR, "1 Jan, 2018")
 
         prices = []
         delta = timedelta(hours=1)
 
         init = klines[0]
         prev = datetime.fromtimestamp(int(init[0])/1000)
-        prices.append([prev, float(init[1]), float(init[2]), 0])
+        prices.append([unit, prev, float(init[1]), float(init[2]), 0])
 
         for i in klines[1:]:
             timestamp = datetime.fromtimestamp(int(i[0])/1000)
@@ -49,20 +50,39 @@ class fetch_records():
 
                 for _ in range(missing_data_points):
                     missing_datetime = prev + delta
-                    prices.append([missing_datetime, np.nan, np.nan, 1])
+                    prices.append([unit, missing_datetime, np.nan, np.nan, 1])
                     prev = missing_datetime
 
-            prices.append([timestamp, float(i[1]), float(i[2]), 0])
+            prices.append([unit, timestamp, float(i[1]), float(i[2]), 0])
             prev = timestamp
 
         prices = pd.DataFrame(prices, dtype="float64",
-                              columns=["datetime", "opening", "closing", "interpolated"])
+                              columns=["unit", "datetime", "opening", "closing", "interpolated"])
         prices["opening"] = prices["opening"].interpolate(
             method='polynomial', order=3).round(2)
         prices["closing"] = prices["closing"].interpolate(
             method='polynomial', order=3).round(2)
+        prices["interpolated"] = prices['interpolated'].astype(int)
 
+        return prices
 
-if __name__ == "__main__":
-    api = dotenv_values("./env/api.env")
-    client = Client(api["API"], api["SECRET"])
+    def run(self, unit):
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        prices = self.get_and_interpolate(unit)
+        rows = prices.to_numpy()
+        cols = ','.join(list(prices.columns))
+        statement = "INSERT INTO entries(%s) values(%%s, %%s, %%s, %%s, CAST(%%s as BOOLEAN))" % (
+            cols)
+
+        try:
+            cursor.executemany(statement, rows)
+            conn.commit()
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()

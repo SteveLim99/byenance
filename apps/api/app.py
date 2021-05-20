@@ -1,7 +1,14 @@
 from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
+from fetch_data import FetchData
 
 app = Flask(__name__)
+
+
+@app.before_first_request
+def update_db():
+    fd = FetchData()
+    fd.run("BTCUSDT")
 
 
 def sensor():
@@ -15,9 +22,4 @@ sched.start()
 
 @app.route("/")
 def home():
-    """ Function for test purposes. """
-    return str(app.config["counter"])
-
-
-if __name__ == "__main__":
-    sensor()
+    return 'hello'

@@ -10,8 +10,7 @@ services:
       - 5432:5432
     volumes:
       - ./apps/db/pgdata:/var/lib/postgresql/data
-      # - ./db/schema_init.sql:/docker-entrypoint-initdb.d/1_init.sql
-      # - ./db/data_init.sql:/docker-entrypoint-initdb.d/2_data_init.sql
+      - ./apps/db/schema_init.sql:/docker-entrypoint-initdb.d/1_init.sql
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
@@ -21,6 +20,8 @@ services:
       - "8080:80"
     depends_on:
       - postgres
+    logging:
+      driver: "none"
   api:
     container_name: api
     build: ./apps/api
