@@ -21,9 +21,9 @@ services:
   #     - "8080:80"
   #   depends_on:
   #     - postgres
-  redis:
-    container_name: redis
-    image: redis:latest
+  # redis:
+  #   container_name: redis
+  #   image: redis:latest
   api:
     container_name: api
     build: ./apps/api
