@@ -32,41 +32,61 @@ class FetchData():
             sys.exit(1)
         return conn
 
-    def get_and_interpolate(self, unit):
-        klines = self.client.get_historical_klines(
-            unit, Client.KLINE_INTERVAL_1HOUR, "1 Jan, 2018")
+    def parse_datetime(self, datetime):
+        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return ' '.join([str(datetime.day), months[datetime.month - 1] + ',', str(datetime.year)])
 
-        prices = []
-        delta = timedelta(hours=1)
+    def get_and_interpolate(self, unit_start_datetimes):
+        all_prices = {}
+        for key in unit_start_datetimes.keys():
+            unit = key
+            start_date = unit_start_datetimes[key]
+            converted_start_date = self.parse_datetime(start_date)
 
-        init = klines[0]
-        prev = datetime.fromtimestamp(int(init[0])/1000)
-        prices.append([unit, prev, float(init[1]), float(init[2]), 0])
+            klines = self.client.get_historical_klines(
+                unit, Client.KLINE_INTERVAL_1HOUR, converted_start_date)
 
-        for i in klines[1:]:
-            timestamp = datetime.fromtimestamp(int(i[0])/1000)
-            time_diff = round(int((timestamp - prev).total_seconds()) / 60)
+            start_idx = 0
+            curr_date = datetime.fromtimestamp(int(klines[start_idx][0])/1000)
+            while curr_date <= start_date:
+                start_idx += 1
+                curr_date = datetime.fromtimestamp(
+                    int(klines[start_idx][0])/1000)
 
-            if time_diff > 60:
-                missing_data_points = round(time_diff / 60) - 1
+            prices = []
+            delta = timedelta(hours=1)
 
-                for _ in range(missing_data_points):
-                    missing_datetime = prev + delta
-                    prices.append([unit, missing_datetime, np.nan, np.nan, 1])
-                    prev = missing_datetime
+            init = klines[start_idx]
+            prev = datetime.fromtimestamp(int(init[0])/1000)
+            prices.append([unit, prev, float(init[1]), float(init[2]), 0])
 
-            prices.append([unit, timestamp, float(i[1]), float(i[2]), 0])
-            prev = timestamp
+            for i in klines[start_idx + 1:]:
+                timestamp = datetime.fromtimestamp(int(i[0])/1000)
+                time_diff = round(int((timestamp - prev).total_seconds()) / 60)
 
-        prices = pd.DataFrame(prices, dtype="float64",
-                              columns=["unit", "datetime", "opening", "closing", "interpolated"])
-        prices["opening"] = prices["opening"].interpolate(
-            method='polynomial', order=3).round(2)
-        prices["closing"] = prices["closing"].interpolate(
-            method='polynomial', order=3).round(2)
-        prices["interpolated"] = prices['interpolated'].astype(int)
+                if time_diff > 60:
+                    missing_data_points = round(time_diff / 60) - 1
 
-        return prices
+                    for _ in range(missing_data_points):
+                        missing_datetime = prev + delta
+                        prices.append(
+                            [unit, missing_datetime, np.nan, np.nan, 1])
+                        prev = missing_datetime
+
+                prices.append([unit, timestamp, float(i[1]), float(i[2]), 0])
+                prev = timestamp
+
+            prices = pd.DataFrame(prices, dtype="float64",
+                                  columns=["unit", "datetime", "opening", "closing", "interpolated"])
+            prices["opening"] = prices["opening"].interpolate(
+                method='polynomial', order=3).round(2)
+            prices["closing"] = prices["closing"].interpolate(
+                method='polynomial', order=3).round(2)
+            prices["interpolated"] = prices['interpolated'].astype(int)
+            all_prices[unit] = prices
+
+        return all_prices
 
     def get_latest_entry(self):
         conn = self.connect()
@@ -98,7 +118,6 @@ class FetchData():
         finally:
             if conn:
                 conn.close()
-            print(res)
             return res
 
     def run(self, unit):
@@ -125,4 +144,5 @@ class FetchData():
 
 if __name__ == "__main__":
     fd = FetchData()
-    fd.get_latest_entry()
+    test = fd.get_latest_entry()
+    print(fd.get_and_interpolate(test))
