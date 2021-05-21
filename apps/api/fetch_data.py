@@ -1,6 +1,8 @@
 from binance.client import Client
 from datetime import datetime, timedelta
 from dotenv import dotenv_values
+from env.units import SCRAP_UNITS, DEFAULT_DATE
+
 import psycopg2
 import numpy as np
 import pandas as pd
@@ -66,6 +68,39 @@ class FetchData():
 
         return prices
 
+    def get_latest_entry(self):
+        conn = self.connect()
+        cursor = conn.cursor()
+
+        statement = "SELECT unit, datetime from entries group by unit, datetime order by datetime desc LIMIT 1"
+        current_time = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        res = {}
+        try:
+            cursor.execute(statement)
+            latest_entries = cursor.fetchall()
+            units_present = set()
+
+            for entry in latest_entries:
+                unit = entry[0]
+                latest_date = entry[1]
+                units_present.add(unit)
+
+                if current_time > latest_date:
+                    res[unit] = latest_date
+
+            missing_units = SCRAP_UNITS - units_present
+            for unit in missing_units:
+                res[unit] = DEFAULT_DATE
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+            if conn:
+                conn.rollback()
+        finally:
+            if conn:
+                conn.close()
+            print(res)
+            return res
+
     def run(self, unit):
         conn = self.connect()
         cursor = conn.cursor()
@@ -86,3 +121,8 @@ class FetchData():
         finally:
             if conn:
                 conn.close()
+
+
+if __name__ == "__main__":
+    fd = FetchData()
+    fd.get_latest_entry()
