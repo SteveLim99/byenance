@@ -8,11 +8,12 @@ app = Flask(__name__)
 @app.before_first_request
 def update_db():
     fd = FetchData()
-    fd.run("BTCUSDT")
+    fd.run()
 
 
 def sensor():
-    return
+    fd = FetchData()
+    fd.run()
 
 
 sched = BackgroundScheduler(daemon=True)
