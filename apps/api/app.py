@@ -11,14 +11,14 @@ def update_db():
     fd.run()
 
 
-def sensor():
+def hourly_db_update():
     fd = FetchData()
     fd.run()
 
 
-sched = BackgroundScheduler(daemon=True)
-sched.add_job(sensor, 'interval', minutes=10)
-sched.start()
+scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(hourly_db_update, 'interval', minutes=60)
+scheduler.start()
 
 
 @app.route("/")

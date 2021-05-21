@@ -113,7 +113,7 @@ class FetchData():
         return all_prices
 
     def get_latest_entry(self, cursor):
-        statement = "SELECT unit, datetime from entries group by unit, datetime order by datetime desc LIMIT 1"
+        statement = "SELECT DISTINCT ON (unit) unit, datetime FROM entries ORDER BY unit, datetime DESC"
         current_time = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
         res = {}
 
@@ -141,18 +141,21 @@ class FetchData():
 
         try:
             units_last_entries = self.get_latest_entry(cursor)
-            prices = self.get_and_interpolate(units_last_entries)
 
-            for unit in prices.keys():
-                rows = unit.to_numpy()
-                cols = ','.join(list(unit.columns))
+            if units_last_entries != {}:
+                prices = self.get_and_interpolate(units_last_entries, cursor)
 
-                statement = "INSERT INTO entries(%s) values(%%s, %%s, %%s, %%s, CAST(%%s as BOOLEAN))" % (
-                    cols)
+                for unit in prices.keys():
+                    price = prices[unit]
+                    rows = price.to_numpy()
+                    cols = ','.join(list(price.columns))
 
-                cursor.executemany(statement, rows)
+                    statement = "INSERT INTO entries(%s) values(%%s, %%s, %%s, %%s, CAST(%%s as BOOLEAN))" % (
+                        cols)
 
-            conn.commit()
+                    cursor.executemany(statement, rows)
+
+                conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
             if conn:
@@ -160,3 +163,8 @@ class FetchData():
         finally:
             if conn:
                 conn.close()
+
+
+if __name__ == "__main__":
+    fd = FetchData()
+    fd.run()
