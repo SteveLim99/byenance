@@ -51,11 +51,48 @@ ALTER TABLE public.entries ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
+-- Name: rolling_returns; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.rolling_returns (
+    rid integer NOT NULL,
+    date date NOT NULL,
+    opening numeric NOT NULL,
+    closing numeric NOT NULL,
+    unit character varying(25) NOT NULL
+);
+
+
+ALTER TABLE public.rolling_returns OWNER TO postgres;
+
+--
+-- Name: rolling_returns_rid_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.rolling_returns ALTER COLUMN rid ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.rolling_returns_rid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: entries entries_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.entries
     ADD CONSTRAINT entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rolling_returns rolling_returns_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rolling_returns
+    ADD CONSTRAINT rolling_returns_pkey PRIMARY KEY (rid);
 
 
 --

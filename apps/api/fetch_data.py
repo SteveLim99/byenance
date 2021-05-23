@@ -69,14 +69,18 @@ class FetchData():
 
             prices = []
             delta = timedelta(hours=1)
+            rolling_datetimes = []
 
             init = klines[start_idx]
             prev = datetime.fromtimestamp(int(init[0])/1000)
             prices.append([unit, prev, float(init[1]), float(init[2]), 0])
             missing_data_point_present = False
             for i in klines[start_idx + 1:]:
-                timestamp = datetime.fromtimestamp(int(i[0])/1000)
+                timestamp = datetime.fromtimestamp(
+                    int(i[0])/1000).replace(minute=0, second=0, microsecond=0)
                 time_diff = round(int((timestamp - prev).total_seconds()) / 60)
+                if timestamp.hour == 0:
+                    rolling_datetimes.append(timestamp.date())
 
                 if time_diff > 60:
                     missing_data_points = round(time_diff / 60) - 1
@@ -84,6 +88,8 @@ class FetchData():
 
                     for _ in range(missing_data_points):
                         missing_datetime = prev + delta
+                        if missing_datetime.hour == 0:
+                            rolling_datetimes.append(missing_datetime.date())
                         prices.append(
                             [unit, missing_datetime, np.nan, np.nan, 1])
                         prev = missing_datetime
@@ -110,7 +116,7 @@ class FetchData():
             prices["interpolated"] = prices['interpolated'].astype(int)
 
             all_prices[unit] = prices
-        return all_prices
+        return (all_prices, rolling_datetimes)
 
     def get_latest_entry(self, cursor):
         statement = "SELECT DISTINCT ON (unit) unit, datetime FROM entries ORDER BY unit, datetime DESC"
@@ -135,6 +141,43 @@ class FetchData():
 
         return res
 
+    def get_rolling_profit(self, end_period, cursor, unit):
+        delta = timedelta(days=1)
+        start_period = end_period - delta
+        statement = "select         \
+                        id,         \
+                        datetime,   \
+                        opening,    \
+                        closing     \
+                    from entries    \
+                    where           \
+                    datetime > %s   \
+                    and             \
+                    datetime <= %s  \
+                    and             \
+                    unit = %s"
+
+        cursor.execute(statement, (start_period, end_period, unit,))
+        period_entries = cursor.fetchall()
+        prev_entry = period_entries[0]
+
+        total_percentile_diff_open, total_percentile_diff_close = 0, 0
+        for curr_entry in period_entries[1:]:
+            prev_entry_open_start, prev_entry_close_start = prev_entry[2], prev_entry[3]
+
+            total_percentile_diff_open += (
+                curr_entry[2] - prev_entry_open_start) * 100 / prev_entry_open_start
+            total_percentile_diff_close += (
+                curr_entry[3] - prev_entry_close_start) * 100 / prev_entry_close_start
+
+            prev_entry = curr_entry
+
+        rolling_open = round(total_percentile_diff_open /
+                             len(period_entries), 6)
+        rolling_close = round(
+            total_percentile_diff_close / len(period_entries), 6)
+        return (rolling_open, rolling_close)
+
     def run(self):
         conn = self.connect()
         cursor = conn.cursor()
@@ -143,7 +186,8 @@ class FetchData():
             units_last_entries = self.get_latest_entry(cursor)
 
             if units_last_entries != {}:
-                prices = self.get_and_interpolate(units_last_entries, cursor)
+                prices, rolling_datetimes = self.get_and_interpolate(
+                    units_last_entries, cursor)
 
                 for unit in prices.keys():
                     price = prices[unit]
@@ -154,6 +198,21 @@ class FetchData():
                         cols)
 
                     cursor.executemany(statement, rows)
+                    rolling_values = []
+                    for date in rolling_datetimes:
+                        rolling_open, rolling_close = self.get_rolling_profit(
+                            date, cursor, unit)
+                        rolling_values.append(
+                            [date, rolling_open, rolling_close, unit])
+
+                    rolling_rows = np.array(rolling_values)
+                    rolling_cols = ','.join(
+                        ["date", "opening", "closing", "unit"])
+
+                    rolling_statement = "INSERT INTO rolling_returns(%s) values(%%s, %%s, %%s, %%s)" % (
+                        rolling_cols)
+
+                    cursor.executemany(rolling_statement, rolling_rows)
 
                 conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
