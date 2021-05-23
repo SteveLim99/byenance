@@ -222,8 +222,3 @@ class FetchData():
         finally:
             if conn:
                 conn.close()
-
-
-if __name__ == "__main__":
-    fd = FetchData()
-    fd.run()
