@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 import sys
 
+'''
+Class Description: The class is responsible for running the algorithm responsible for scrapping data from the binance API. 
+                   The algorithm utilizes the Kline data points provided and stores the time stamp, opening price and closing price.
+'''
+
 
 class UploadData():
 
@@ -23,6 +28,12 @@ class UploadData():
             "password": db["POSTGRES_PASSWORD"]
         }
 
+    '''
+    Function Description: A helper function utilize to connect to the PostgreSQL instance 
+    @return Connection => A connection object to PostgreSQL instance is returned 
+                          utilizing the environment variables set in ./env/database.env
+    '''
+
     def connect(self):
         conn = None
         try:
@@ -32,10 +43,25 @@ class UploadData():
             sys.exit(1)
         return conn
 
+    '''
+    Function Description: A helper function utilize to convert specified python datetime objects into a format 
+                          understandable by the Binance API. 
+    @return String => String representation of Binance API format of datetime inputs.         
+    '''
+
     def parse_datetime(self, datetime):
         months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         return ' '.join([str(datetime.day), months[datetime.month - 1] + ',', str(datetime.year)])
+
+    '''
+    Function Description: A helper function utilize to fetch previously inserted entries on the database. 
+                          This function is called in the instance where the scheduler recieves missing data points and has 
+                          < 100 data points. The intuition behind fetching more legacy data from the database was that 
+                          a larger dataset would provide a better approximation of the interpolation polynomial curve. Hence,
+                          providing a more accurate approximation of prices at the missing data points.
+    @return list => A list containing the previous 100 legacy data from the suppoesed datetime of the missing data point.       
+    '''
 
     def get_statistical_data(self, unit, cursor):
         statement = "SELECT * from entries where unit = %s order by datetime desc limit 100"
@@ -50,6 +76,15 @@ class UploadData():
                 [np.nan, np.nan, opening, closing, np.nan])
 
         return statistical_data
+
+    '''
+    Function Description: A helper function utilize to fetch previously inserted entries on the database. 
+                          This function is called in the instance where the scheduler recieves missing data points and has 
+                          < 100 data points. The intuition behind fetching more legacy data from the database was that 
+                          a larger dataset would provide a better approximation of the interpolation polynomial curve. Hence,
+                          providing a more accurate approximation of prices at the missing data points.
+    @return list => A list containing the previous 100 legacy data from the suppoesed datetime of the missing data point.       
+    '''
 
     def get_and_interpolate(self, unit_start_datetimes, cursor):
         all_prices = {}
@@ -106,9 +141,9 @@ class UploadData():
             prices = pd.DataFrame(prices, dtype="float64",
                                   columns=["unit", "datetime", "opening", "closing", "interpolated"])
             prices["opening"] = prices["opening"].interpolate(
-                method='polynomial', order=3).round(2)
+                method='polynomial', order=2).round(2)
             prices["closing"] = prices["closing"].interpolate(
-                method='polynomial', order=3).round(2)
+                method='polynomial', order=2).round(2)
 
             if appended_statistical_data:
                 prices = prices[prices['unit'].notna()]
@@ -117,6 +152,15 @@ class UploadData():
 
             all_prices[unit] = prices
         return (all_prices, rolling_datetimes)
+
+    '''
+    Function Description: A helper function utilize to fetch the datetime of the last inserted entry on the database for each unit 
+                          found on the database. The latest datetime is utilize upon the first request called at the API upon start up
+                          which would allow the database to be updated before any data is returned to the client. It should be noted that, 
+                          new units specified in .env/units.py that are not found in the database will be set to the default start time specified.
+    @param cursor => Cursor object utilized for SQL statement executions.
+    @return dictionary => A dictionary containing the relevant start time of each units specified in .env/units.py 
+    '''
 
     def get_latest_entry(self, cursor):
         statement = "SELECT DISTINCT ON (unit) unit, datetime FROM entries ORDER BY unit, datetime DESC"
@@ -135,6 +179,9 @@ class UploadData():
             if current_time > latest_date:
                 res[unit] = latest_date
 
+        # units found in the database will be compared to the ones specified in .env/units.py
+        # missing units will be set to default
+        # this allows new units to be added in the units.py file and to be automatically ingested into our database.
         missing_units = SCRAP_UNITS - units_present
         for unit in missing_units:
             res[unit] = DEFAULT_START_DATE
@@ -178,6 +225,16 @@ class UploadData():
             total_percentile_diff_close / len(period_entries), 6)
         return (rolling_open, rolling_close)
 
+    '''
+    Function Description: The main algorithm utilized to automatically populate the database with data scrapped from binance and 
+                          the daily returns calculated. This algorithm is utilized in both the hourly ingest and the start up ingest 
+                          which allow the database to be updated on an hourly basis and when the application first starts up. It should be
+                          noted that the Connect and Cursor objects for the SQL database are specified here and passed in as parameters to the
+                          respective helper functions. This prevent multiple Cursor objects to be initialize making it easier to mantain the number 
+                          of active connections to the database. This is because the entire algorithm within this function is wrapped in a 
+                          try, catch and finally block which will always clsoe the database connection whether the run was successful or not.
+    '''
+
     def run(self):
         conn = self.connect()
         cursor = conn.cursor()
@@ -185,6 +242,8 @@ class UploadData():
             units_last_entries = self.get_latest_entry(cursor)
 
             if units_last_entries != {}:
+                # fetching the hourly price entries and the rolling datetimes which will be utilized to calculated the 
+                # rolling daily returns 
                 prices, rolling_datetimes = self.get_and_interpolate(
                     units_last_entries, cursor)
 
@@ -193,10 +252,19 @@ class UploadData():
                     rows = price.to_numpy()
                     cols = ','.join(list(price.columns))
 
+                    # It should be noted that all SQL statements are written as parameterised queries to prevent SQL injection attacks 
                     statement = "INSERT INTO entries(%s) values(%%s, %%s, %%s, %%s, CAST(%%s as BOOLEAN))" % (
                         cols)
 
+                    # Bulk insert of entries to reduce network transfer cost and database load 
+                    # this method provides significant performance benefits compared to iteratively 
+                    # and repetitive calls to cursor to insert entries.
                     cursor.executemany(statement, rows)
+
+                    # Individual calculation of daily returns using an iterative approach 
+                    # This decision was employed to tie together with the automatic hourly updates, 
+                    # As hourly updates would only consist of at most one daily entry at 00:00 at any time, 
+                    # this will not be as performance intensive as compared to the initial bulk loading of data into the database.
                     rolling_values = []
                     for date in rolling_datetimes:
                         rolling_open, rolling_close = self.get_rolling_profit(
@@ -211,6 +279,7 @@ class UploadData():
                     rolling_statement = "INSERT INTO rolling_returns(%s) values(%%s, %%s, %%s, %%s)" % (
                         rolling_cols)
 
+                    # Bulk insert of rolling returns
                     cursor.executemany(rolling_statement, rolling_rows)
 
                 conn.commit()
@@ -219,5 +288,6 @@ class UploadData():
             if conn:
                 conn.rollback()
         finally:
+            # Close active connection to the database 
             if conn:
                 conn.close()

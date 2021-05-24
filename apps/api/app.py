@@ -7,21 +7,22 @@ app = Flask(__name__)
 fd = UploadData()
 gd = GetData()
 
-
+# Upon initialization of the system, the first request will first fetch all kline data from the 
+# Binance API using the default date specified in ./env/units.py
 @app.before_first_request
 def update_db():
     fd.run()
 
-
 def hourly_db_update():
     fd.run()
 
-
+# Scheduler Utilized to fetch hourly kline data points from the binance api 
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(hourly_db_update, 'interval', minutes=60)
 scheduler.start()
 
-
+# Endpoint used to obtain entries stored in the database 
+# entries are defined as each hourly data point found via the Binance API 
 @app.route("/getEntries",  methods=['GET'])
 def getEntries():
     data = gd.get_data_from_db("entries")
@@ -32,6 +33,7 @@ def getEntries():
     if data != None:
         entries = []
 
+        # Data returned are formatted as a list of dictionaries to allow for easy access of data in the web application.
         for d in data:
             tmp = {
                 'id': d[0],
@@ -48,7 +50,7 @@ def getEntries():
 
     return jsonify(res)
 
-
+# Endpoint used to obtain daily rolling returns calculated and stored in the database
 @app.route("/getRollingReturns", methods=['GET'])
 def getRollingReturns():
     data = gd.get_data_from_db("rolling_returns")
