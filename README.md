@@ -1,7 +1,7 @@
 # byenance
 
 ## Running the Development Environment
-1. Create a file called "env" at ./ and enter the environmental variables as specified in ./env_example. There are 3 files to edit:
+1. Create a file called "env" at ./ and enter the environmental variables as specified in ./env_example. It should be noted that the default env variables within pgadmin.env is already pre-filled. There are 3 files to edit:
 - database.env
 - pgadmin.env
 - api.env
@@ -14,7 +14,7 @@ $ npm install --global yarn
 ```
 $ docker-compose up
 ```
-5. You can access the web-application at http://localhost:3000/
+5. You can access the web-application at http://localhost:3000/. It should be noted that the first time set up takes a little bit of time as it fetches and inserts a bulk of the historical data into the database instance. 
 6. Removing the containers 
 ```
 $ docker-compose down
