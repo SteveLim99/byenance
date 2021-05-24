@@ -21,7 +21,7 @@ class App extends Component {
       {
         title: "Unit",
         dataIndex: "unit",
-        sorter: (a, b) => a.unit.length - b.unit.length,
+        sorter: (a, b) => a.unit.localeCompare(b.unit),
         ellipsis: true,
         sortDirections: ["descend", "ascend"]
       },
@@ -49,7 +49,7 @@ class App extends Component {
       {
         title: "Interpolated",
         dataIndex: "interpolated",
-        sorter: (a, b) => a.interpolated - b.interpolated,
+        sorter: (a, b) => a.interpolated.length - b.interpolated.length,
         ellipsis: true,
         sortDirections: ["descend", "ascend"]
       }
@@ -66,14 +66,14 @@ class App extends Component {
       {
         title: "Unit",
         dataIndex: "unit",
-        sorter: (a, b) => a.unit.length - b.unit.length,
+        sorter: (a, b) => a.unit.localeCompare(b.unit),
         ellipsis: true,
         sortDirections: ["descend", "ascend"]
       },
       {
         title: "Datetime",
-        dataIndex: "entries_datetime",
-        sorter: (a, b) => a.files_gtype.length - b.files_gtype.length,
+        dataIndex: "date",
+        sorter: (a, b) => new Date(a.date) - new Date(b.date),
         ellipsis: true,
         sortDirections: ["descend", "ascend"]
       },
@@ -135,15 +135,16 @@ class App extends Component {
         })
       } else {
         alert("An error occured when fetching data from the database. Please try again.")
-        loader.style.display = "none";
-        start_button.style.display = 'block';
       }
-      this.setState({
-        startTitle: "Click Start to Fetch Database Results"
-      })
     } catch (error) {
       console.log(error)
       alert("An error occurred when fetching data from the database.")
+    } finally {
+      this.setState({
+        startTitle: "Click Start to Fetch Database Results"
+      })
+      loader.style.display = "none";
+      start_button.style.display = 'flex';
     }
   }
 

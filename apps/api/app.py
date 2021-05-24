@@ -30,25 +30,20 @@ def getEntries():
     }
 
     if data != None:
-        id, unit, datetime, opening, closing, interpolated = [], [], [], [], [], []
+        entries = []
 
         for d in data:
-            id.append(d[0])
-            unit.append(d[1])
-            datetime.append(d[2])
-            opening.append(d[3])
-            closing.append(d[4])
-            interpolated.append(d[5])
+            tmp = {
+                'id': d[0],
+                'unit': d[1],
+                'datetime': d[2],
+                'opening': str(d[3]),
+                'closing': str(d[4]),
+                'interpolated': str(d[5])
+            }
+            entries.append(tmp)
 
-        tmp = {}
-        tmp['id'] = id
-        tmp['unit'] = unit
-        tmp['datetime'] = datetime
-        tmp['opening'] = opening
-        tmp['closing'] = closing
-        tmp['interpolated'] = interpolated
-
-        res['entries'] = tmp
+        res['entries'] = entries
         res['status'] = 'success'
 
     return jsonify(res)
@@ -62,23 +57,19 @@ def getRollingReturns():
     }
 
     if data != None:
-        id, date, opening, closing, unit = [], [], [], [], []
+        returns = []
 
         for d in data:
-            id.append(d[0])
-            date.append(d[1])
-            opening.append(d[2])
-            closing.append(d[3])
-            unit.append(d[4])
+            tmp = {
+                'id': d[0],
+                'date': d[1],
+                'opening': str(d[2]),
+                'closing': str(d[3]),
+                'unit': d[4]
+            }
+            returns.append(tmp)
 
-        tmp = {}
-        tmp['id'] = id
-        tmp['date'] = date
-        tmp['opening'] = opening
-        tmp['closing'] = closing
-        tmp['unit'] = unit
-
-        res['returns'] = tmp
+        res['returns'] = returns
         res['status'] = 'success'
 
     return jsonify(res)

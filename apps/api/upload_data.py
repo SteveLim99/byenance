@@ -181,7 +181,6 @@ class UploadData():
     def run(self):
         conn = self.connect()
         cursor = conn.cursor()
-
         try:
             units_last_entries = self.get_latest_entry(cursor)
 

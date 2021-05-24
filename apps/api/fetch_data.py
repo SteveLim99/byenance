@@ -34,14 +34,15 @@ class GetData():
     def get_data_from_db(self, table):
         conn = self.connect()
         cursor = conn.cursor()
+        statement = "SELECT * FROM " + table
         data = None
         retry = 0
 
         while retry != self.max_retry:
             try:
-                statement = "SELECT * FROM " + table + " limit 100"
                 cursor.execute(statement)
                 data = cursor.fetchall()
+                break
             except (Exception, psycopg2.DatabaseError) as error:
                 print(error)
                 if conn:
