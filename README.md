@@ -5,17 +5,18 @@
 - database.env
 - pgadmin.env
 - api.env
-2. Edit the database.env and pgadmin.env files accordingly to your preference, update api.env with your Binance API key. 
-3. Skip this step if yarn is already installed globally. Otherwise, run the following command 
+2. The starting date of the data and units scrapped from Binance is modifiable in .env/units.py.
+3. Edit the database.env and pgadmin.env files accordingly to your preference, update api.env with your Binance API key. 
+4. Skip this step if yarn is already installed globally. Otherwise, run the following command 
 ```
 $ npm install --global yarn
 ```
-4. Finally, deploy the docker containers 
+5. Finally, deploy the docker containers 
 ```
 $ docker-compose up
 ```
-5. You can access the web-application at http://localhost:3000/. It should be noted that the first time set up takes a little bit of time as it fetches and inserts a bulk of the historical data into the database instance. 
-6. Removing the containers 
+6. You can access the web-application at http://localhost:3000/. It should be noted that the first time set up takes a little bit of time as it fetches and inserts a bulk of the historical data into the database instance. 
+7. Removing the containers 
 ```
 $ docker-compose down
 ```
