@@ -1,7 +1,8 @@
 FROM node:14.9
 WORKDIR /app
 COPY package*.json ./
-RUN yarn install
+COPY yarn*.lock ./
+RUN yarn install --network-timeout 100000 
 COPY . .
 EXPOSE 3000
 
