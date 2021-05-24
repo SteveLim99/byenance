@@ -18,3 +18,29 @@ $ docker-compose up
 6. Removing the containers 
 ```
 $ docker-compose down
+```
+
+## Using pgAdmin4 to Access the PostgreSQL Service. 
+1. In ./docker-compose.yml, uncomment the pgadmin service as seen below:
+```
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: pgadmin
+  #   env_file:
+  #     - ./env/pgadmin.env
+  #   ports:
+  #     - "8080:80"
+  #   depends_on:
+  #     - postgres
+  #   logging:
+  #     driver: "none"
+```
+2. Run the following command 
+```
+$ docker-compose up pgadmin
+```
+3. The pgadmin instance can be access at http://localhost:8080/ and you can connect to the database using the environment variables set in database.env.
+4. To stop the pgAdmin4 service. Run the following command.
+```
+$ docker-compose stop pgadmin
+```
