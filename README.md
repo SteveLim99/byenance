@@ -13,7 +13,7 @@ $ npm install --global yarn
 ```
 5. Finally, deploy the docker containers 
 ```
-$ docker-compose up
+$ docker-compose up --build
 ```
 6. You can access the web-application at http://localhost:3000/. It should be noted that the first time set up takes a little bit of time as it fetches and inserts a bulk of the historical data into the database instance. 
 7. Removing the containers 
