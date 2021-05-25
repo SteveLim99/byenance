@@ -11,7 +11,7 @@
 ```
 $ npm install --global yarn
 ```
-5. Finally, deploy the docker containers 
+5. Finally, build and start the docker containers 
 ```
 $ docker-compose up --build
 ```
