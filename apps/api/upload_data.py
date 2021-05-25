@@ -59,7 +59,7 @@ class UploadData():
                           This function is called in the instance where the scheduler recieves missing data points and has 
                           < 100 data points. The intuition behind fetching more legacy data from the database was that 
                           a larger dataset would provide a better approximation of the interpolation polynomial curve. Hence,
-                          providing a more accurate approximation of prices at the missing data points.
+                          providing a more accurate approximation of prices at the missing data points and accomadating for statistical significance. 
     @return list => A list containing the previous 100 legacy data from the suppoesed datetime of the missing data point.       
     '''
 
@@ -72,29 +72,34 @@ class UploadData():
         for entry in entries:
             opening = entry[3]
             closing = entry[4]
+            # Data points excluding the opening and closing price are inserted as NaN
+            # This allows us to easily filter out the added data points after interpolation 
             statistical_data.append(
                 [np.nan, np.nan, opening, closing, np.nan])
 
         return statistical_data
 
     '''
-    Function Description: A helper function utilize to fetch previously inserted entries on the database. 
-                          This function is called in the instance where the scheduler recieves missing data points and has 
-                          < 100 data points. The intuition behind fetching more legacy data from the database was that 
-                          a larger dataset would provide a better approximation of the interpolation polynomial curve. Hence,
-                          providing a more accurate approximation of prices at the missing data points.
-    @return list => A list containing the previous 100 legacy data from the suppoesed datetime of the missing data point.       
+    Function Description: Main function used to fetch and interpolate data from the Binance API. 
+    @param unit_start_datetimes => Dictionary containing start datetime object the function should query from to update the database upon first request of the flask server and hourly updates.
+                                   Start datetime object is representative of the lastest entry found in the database for each unit. 
+    @param cursor => Cursor object utilized for SQL statement executions.
+    @return dictionary => Dictionary containing the mapping of each unit and their respective price data stored in a dataframe.
+    @return dictionary => List containing the datetime objects which are representative of a new day. A new day is defined by a data point at hour 00:00
     '''
 
     def get_and_interpolate(self, unit_start_datetimes, cursor):
         all_prices = {}
+        # Iterate through all units defined in .env/units.py
         for unit in unit_start_datetimes.keys():
             start_date = unit_start_datetimes[unit]
             converted_start_date = self.parse_datetime(start_date)
 
+            # Fetching historical kline data from binance api 
             klines = self.client.get_historical_klines(
                 unit, Client.KLINE_INTERVAL_1HOUR, converted_start_date)
 
+            # Iterate through data points that are already found on database based on their datetime 
             start_idx = 0
             curr_date = datetime.fromtimestamp(int(klines[start_idx][0])/1000)
             while curr_date <= start_date:
@@ -106,11 +111,16 @@ class UploadData():
             delta = timedelta(hours=1)
             rolling_datetimes = []
 
+            # Initialize variable that would be used to compare difference between two datetime objects 
+            # This is required as it allows us to identify and insert missing hourly data points by checking 
+            # whether the time difference is more than 60 minutes 
             init = klines[start_idx]
             prev = datetime.fromtimestamp(int(init[0])/1000)
             prices.append([unit, prev, float(init[1]), float(init[2]), 0])
             missing_data_point_present = False
+
             for i in klines[start_idx + 1:]:
+                # Replacing the current seen timestamp to only contain the hour to make for an easier comparison 
                 timestamp = datetime.fromtimestamp(
                     int(i[0])/1000).replace(minute=0, second=0, microsecond=0)
                 time_diff = round(int((timestamp - prev).total_seconds()) / 60)
@@ -121,6 +131,7 @@ class UploadData():
                     missing_data_points = round(time_diff / 60) - 1
                     missing_data_point_present = True
 
+                    # Inserting missing data points with NaN placeholders which are identifiable via pandas during interpolation 
                     for _ in range(missing_data_points):
                         missing_datetime = prev + delta
                         if missing_datetime.hour == 0:
@@ -129,27 +140,40 @@ class UploadData():
                             [unit, missing_datetime, np.nan, np.nan, 1])
                         prev = missing_datetime
 
+                # Inserting current data point seen
                 prices.append([unit, timestamp, float(i[1]), float(i[2]), 0])
                 prev = timestamp
 
+            # Identifying whether current data is sufficiently large to accomadate for statistical significance during interpolation 
+            # If true, previously inserted data points based on the datetime are fetched and pre-pended to the list 
             appended_statistical_data = False
             if missing_data_point_present and len(prices) <= 100:
                 statistical_data = self.get_statistical_data(unit, cursor)
                 prices = statistical_data + prices
                 appended_statistical_data = True
 
+            # Conversion of list to a dataframe object 
             prices = pd.DataFrame(prices, dtype="float64",
                                   columns=["unit", "datetime", "opening", "closing", "interpolated"])
+
+            # A polynomial interpolation method was chosen due to the trend of crypto prices.
+            # As crypto prices are very volatile, there is not clear or visible trend of the graph.
+            # Hence, we opted for a polynomial interpolation method as it would provide a better approximation of the
+            # crypto price trend as compared to a linear interpolation method.
             prices["opening"] = prices["opening"].interpolate(
                 method='polynomial', order=2).round(2)
             prices["closing"] = prices["closing"].interpolate(
                 method='polynomial', order=2).round(2)
 
+            # Removing previously inserted data points to accomadate for statistical significance 
+            # Removal is relatively easy as all current data entries are ensured to contain a unit whereas 
+            # added data entries have NaN as a unit allowing us to easily filter out added data entries. 
             if appended_statistical_data:
                 prices = prices[prices['unit'].notna()]
 
             prices["interpolated"] = prices['interpolated'].astype(int)
 
+            # Adding dataframe to corresponding unit key in the dictionary 
             all_prices[unit] = prices
         return (all_prices, rolling_datetimes)
 
@@ -188,9 +212,20 @@ class UploadData():
 
         return res
 
+    '''
+    Function Description: Main function utilize to calculate the daily returns based on daily rolling hourly returns based on previously 
+                          inserted daily entries for the provided date object. 
+    @param end_period => date object which represents the 00:00 hour of a new day
+    @param cursor => Cursor object utilized for SQL statement executions.
+    @param unit => crypto unit utilized to query the database 
+    @return float => float object representing rolling returns based on opening prices 
+    @return float => float object representing rolling returns based on closing prices 
+    '''
+
     def get_rolling_profit(self, end_period, cursor, unit):
         delta = timedelta(days=1)
         start_period = end_period - delta
+        # Fetching previously inserted entries stored on the database 
         statement = "select         \
                         id,         \
                         datetime,   \
@@ -208,6 +243,8 @@ class UploadData():
         period_entries = cursor.fetchall()
         prev_entry = period_entries[0]
 
+        # Algorithm utilized to calculate rolling returns 
+        # An iterative approach was opted for to accomadate for the hourly updates to the database 
         total_percentile_diff_open, total_percentile_diff_close = 0, 0
         for curr_entry in period_entries[1:]:
             prev_entry_open_start, prev_entry_close_start = prev_entry[2], prev_entry[3]
@@ -242,8 +279,8 @@ class UploadData():
             units_last_entries = self.get_latest_entry(cursor)
 
             if units_last_entries != {}:
-                # fetching the hourly price entries and the rolling datetimes which will be utilized to calculated the 
-                # rolling daily returns 
+                # fetching the hourly price entries and the rolling datetimes which will be utilized to calculated the
+                # rolling daily returns
                 prices, rolling_datetimes = self.get_and_interpolate(
                     units_last_entries, cursor)
 
@@ -252,18 +289,18 @@ class UploadData():
                     rows = price.to_numpy()
                     cols = ','.join(list(price.columns))
 
-                    # It should be noted that all SQL statements are written as parameterised queries to prevent SQL injection attacks 
+                    # It should be noted that all SQL statements are written as parameterised queries to prevent SQL injection attacks
                     statement = "INSERT INTO entries(%s) values(%%s, %%s, %%s, %%s, CAST(%%s as BOOLEAN))" % (
                         cols)
 
-                    # Bulk insert of entries to reduce network transfer cost and database load 
-                    # this method provides significant performance benefits compared to iteratively 
+                    # Bulk insert of entries to reduce network transfer cost and database load
+                    # this method provides significant performance benefits compared to iteratively
                     # and repetitive calls to cursor to insert entries.
                     cursor.executemany(statement, rows)
 
-                    # Individual calculation of daily returns using an iterative approach 
-                    # This decision was employed to tie together with the automatic hourly updates, 
-                    # As hourly updates would only consist of at most one daily entry at 00:00 at any time, 
+                    # Individual calculation of daily returns using an iterative approach
+                    # This decision was employed to tie together with the automatic hourly updates,
+                    # As hourly updates would only consist of at most one daily entry at 00:00 at any time,
                     # this will not be as performance intensive as compared to the initial bulk loading of data into the database.
                     rolling_values = []
                     for date in rolling_datetimes:
@@ -288,6 +325,6 @@ class UploadData():
             if conn:
                 conn.rollback()
         finally:
-            # Close active connection to the database 
+            # Close active connection to the database
             if conn:
                 conn.close()

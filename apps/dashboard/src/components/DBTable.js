@@ -15,13 +15,6 @@ export class DBTable extends Component {
     render() {
         return (
             <Styles>
-                {/* <SearchBar
-                    handleSearchKeyword={this.props.handleSearchKeyword}
-                    handleSearchSelect={this.props.handleSearchSelect}
-                    handleSearchDates={this.props.handleSearchDates}
-                    searchTable={this.props.searchTable}
-                    resetTable={this.props.resetTable}>
-                </SearchBar> */}
                 <Table
                     columns={this.props.columns}
                     pagination={{ showSizeChanger: true }}

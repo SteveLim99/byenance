@@ -25,7 +25,8 @@ scheduler.start()
 # entries are defined as each hourly data point found via the Binance API 
 @app.route("/getEntries",  methods=['GET'])
 def getEntries():
-    data = gd.get_data_from_db("entries")
+    data = gd.run("entries")
+    # Status message utilized to easily identify whether the main algorithm was successful on the client side 
     res = {
         'status': 'fail'
     }
@@ -53,7 +54,7 @@ def getEntries():
 # Endpoint used to obtain daily rolling returns calculated and stored in the database
 @app.route("/getRollingReturns", methods=['GET'])
 def getRollingReturns():
-    data = gd.get_data_from_db("rolling_returns")
+    data = gd.run("rolling_returns")
     res = {
         'status': 'fail'
     }

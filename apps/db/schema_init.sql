@@ -27,7 +27,7 @@ SET default_table_access_method = heap;
 CREATE TABLE public.entries (
     id integer NOT NULL,
     unit character varying(25) NOT NULL,
-    datetime timestamp without time zone NOT NULL,
+    datetime timestamp with time zone NOT NULL,
     opening numeric NOT NULL,
     closing numeric NOT NULL,
     interpolated boolean NOT NULL

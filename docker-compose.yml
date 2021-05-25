@@ -11,6 +11,7 @@ services:
     volumes:
       - ./apps/db/pgdata:/var/lib/postgresql/data
       - ./apps/db/schema_init.sql:/docker-entrypoint-initdb.d/1_init.sql
+      - ./apps/db/data_init.sql:/docker-entrypoint-initdb.d/2_init.sql
   api:
     container_name: api
     build: ./apps/api
